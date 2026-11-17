@@ -1,0 +1,103 @@
+# A private Pelican federation standing in for the OSDF, for AP41's issuer migration. Every server runs a
+# published v26.0 image. verify.py drives it and sets STAGE (a file in stages/) and SIM_DIR (generated keys
+# and certificates, under .sim/).
+#
+# Nothing here reaches production: osg-htc.org and ap41.uw.osg-htc.org are names on this compose network,
+# and every server trusts only the system roots plus a throwaway test CA.
+name: ap41-switch-over
+
+x-trust-test-ca: &trust-test-ca
+  # Install the test CA as Pelican's own TLS CA (so it signs this server's host certificate) and in the
+  # system trust store (so Go, XRootD and curl all trust every other server here). Then start as usual.
+  - sh
+  - -c
+  - |
+    set -e
+    mkdir -p /etc/pelican/certificates
+    cp /test-ca/ca.pem /etc/pelican/certificates/tlsca.pem
+    cp /test-ca/ca.key /etc/pelican/certificates/tlsca.key
+    chmod 600 /etc/pelican/certificates/tlsca.key
+    cp /test-ca/ca.pem /etc/pki/ca-trust/source/anchors/ap41-switch-over-test-ca.pem
+    update-ca-trust
+    exec "$$@"
+  - entrypoint
+
+services:
+  discovery:
+    # Stand-in for https://osg-htc.org's federation discovery document, pointing at this federation's
+    # Director and Registry.
+    image: hub.osg-htc.org/pelican_platform/origin:v26.0
+    container_name: ap41-switch-over-discovery
+    entrypoint: ["python3", "/stub/serve.py", "/www", "/tls/server.pem", "/tls/server.key"]
+    volumes:
+      - ./stub/serve.py:/stub/serve.py:ro
+      - ${SIM_DIR:?set SIM_DIR}/discovery-www:/www:ro
+      - ${SIM_DIR}/discovery-tls:/tls:ro
+    networks:
+      default:
+        aliases: [osg-htc.org]
+
+  registry:
+    image: hub.osg-htc.org/pelican_platform/registry:v26.0
+    container_name: ap41-switch-over-registry
+    hostname: registry
+    entrypoint: *trust-test-ca
+    command: ["/entrypoint.sh", "pelican-server", "registry", "serve"]
+    volumes:
+      - ./fed/registry.yaml:/etc/pelican/pelican.yaml:ro
+      - ${SIM_DIR}/ca:/test-ca:ro
+    depends_on: [discovery]
+
+  director:
+    image: hub.osg-htc.org/pelican_platform/director:v26.0
+    container_name: ap41-switch-over-director
+    hostname: director
+    entrypoint: *trust-test-ca
+    command: ["/entrypoint.sh", "pelican-server", "director", "serve"]
+    volumes:
+      - ./fed/director.yaml:/etc/pelican/pelican.yaml:ro
+      - ${SIM_DIR}/ca:/test-ca:ro
+    depends_on: [registry]
+
+  origin:
+    # AP41's Origin, with stages/${STAGE}.yaml as its config. Its IssuerKeysDirectory holds the simulated
+    # AP signing key, the way AP41's must today for the AP's tokens to verify.
+    image: hub.osg-htc.org/pelican_platform/origin:v26.0
+    container_name: ap41-switch-over-origin
+    hostname: ap41.uw.osg-htc.org
+    entrypoint: *trust-test-ca
+    command: ["/entrypoint.sh", "pelican-server", "origin", "serve"]
+    volumes:
+      - ./stages/${STAGE:?set STAGE}.yaml:/etc/pelican/pelican.yaml:ro
+      - ${SIM_DIR}/ca:/test-ca:ro
+      - ${SIM_DIR}/ap-keys:/sim:ro                     # the simulated AP's private key, for minting test tokens
+      - ${SIM_DIR}/origin-keys:/etc/pelican/issuer-keys  # the same key, as the Origin's signing key
+    tmpfs:
+      - /storage/ap41:mode=1777
+    networks:
+      default:
+        aliases: [ap41.uw.osg-htc.org]
+    depends_on: [director]
+
+  cache:
+    image: hub.osg-htc.org/pelican_platform/cache:v26.0
+    container_name: ap41-switch-over-cache
+    hostname: cache
+    entrypoint: *trust-test-ca
+    command: ["/entrypoint.sh", "pelican-server", "cache", "serve"]
+    volumes:
+      - ./fed/cache.yaml:/etc/pelican/pelican.yaml:ro
+      - ${SIM_DIR}/ca:/test-ca:ro
+      - ${SIM_DIR}/cache-keys:/etc/pelican/issuer-keys    # keep the Cache's key (and its registration) across restarts
+    tmpfs:
+      - /run/pelican/cache
+    depends_on: [director]
+
+  client:
+    # Where the test requests come from: inside the federation, trusting the test CA.
+    image: hub.osg-htc.org/pelican_platform/origin:v26.0
+    container_name: ap41-switch-over-client
+    entrypoint: *trust-test-ca
+    command: ["sleep", "infinity"]
+    volumes:
+      - ${SIM_DIR}/ca:/test-ca:ro

@@ -1,0 +1,21 @@
+# Stage 4, explicit: drop the old issuer from the export. Server.IssuerUrl is left as it was.
+Logging:
+  Origin:
+    Scitokens: trace
+Server:
+  Hostname: ap41.uw.osg-htc.org
+  ExternalWebUrl: https://ap41.uw.osg-htc.org:8444
+  WebPort: 8444
+  IssuerUrl: https://ap41.uw.osg-htc.org:8444
+Federation:
+  DiscoveryUrl: https://osg-htc.org
+Origin:
+  StorageType: posix
+  EnableIssuer: true
+  IssuerMode: embedded
+  Exports:
+    - FederationPrefix: /ospool/ap41/
+      StoragePrefix: /storage/ap41/
+      Capabilities: ["DirectReads", "Writes", "Reads", "Listings"]
+      IssuerUrls:
+        - https://ap41.uw.osg-htc.org:8444/api/v1.0/issuer/ns/ospool/ap41

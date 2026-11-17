@@ -1,0 +1,24 @@
+# Stage 0: AP41 today. Values copied from AP41's running config; only the ones that decide which
+# issuers the export trusts, and the URLs those issuers are built from.
+#
+# Differences from AP41 (all stages): the federation behind DiscoveryUrl is the local test one, the
+# storage prefix is an empty tmpfs mount, and Logging.Origin.Scitokens is trace (AP41: fatal) so
+# XRootD logs why it refuses a token.
+Logging:
+  Origin:
+    Scitokens: trace
+Server:
+  Hostname: ap41.uw.osg-htc.org
+  ExternalWebUrl: https://ap41.uw.osg-htc.org:8444
+  WebPort: 8444
+  IssuerUrl: https://ap41.uw.osg-htc.org:8444
+Federation:
+  DiscoveryUrl: https://osg-htc.org
+Origin:
+  StorageType: posix
+  EnableIssuer: false
+  IssuerMode: embedded
+  Exports:
+    - FederationPrefix: /ospool/ap41/
+      StoragePrefix: /storage/ap41/
+      Capabilities: ["DirectReads", "Writes", "Reads", "Listings"]

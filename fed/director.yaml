@@ -1,0 +1,7 @@
+# Test federation's Director.
+Server:
+  Hostname: director
+  ExternalWebUrl: https://director:8444
+  WebPort: 8444
+Federation:
+  DiscoveryUrl: https://osg-htc.org

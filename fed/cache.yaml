@@ -1,0 +1,10 @@
+# Test federation's Cache. It builds its XRootD token config from the Director's namespace ads,
+# which is the second way the issuer list is consumed.
+Server:
+  Hostname: cache
+  ExternalWebUrl: https://cache:8444
+  WebPort: 8444
+Federation:
+  DiscoveryUrl: https://osg-htc.org
+Cache:
+  Port: 8443
